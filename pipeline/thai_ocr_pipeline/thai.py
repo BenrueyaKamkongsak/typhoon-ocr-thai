@@ -13,6 +13,15 @@ def to_arabic_digits(text: str) -> str:
     return text.translate(THAI_DIGITS)
 
 
+_SPLIT_SARA_AM = re.compile("([่-๋]?)ํ([่-๋]?)า")
+
+
+def normalise_thai_text(text: str) -> str:
+    """Fix Thai that looks right but has the wrong code points. OCR often writes sara am (ำ) as
+    nikhahit + sara aa (ํ + า): 'จํากัด' renders like 'จำกัด' but never matches it in a search or join."""
+    return _SPLIT_SARA_AM.sub(lambda m: m.group(1) + m.group(2) + "ำ", text)
+
+
 def parse_amount(text: str | None) -> Decimal | None:
     """'489,000.00 บาท' / '๔๘๙,๐๐๐' -> Decimal('489000.00'). None when no number is found."""
     if not text:

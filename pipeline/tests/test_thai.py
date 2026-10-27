@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 
 from thai_ocr_pipeline.thai import (
-    baht_words_to_amount, normalise_company, parse_amount, parse_thai_date, to_arabic_digits,
+    baht_words_to_amount, normalise_company, normalise_thai_text, parse_amount, parse_thai_date, to_arabic_digits,
 )
 
 
@@ -67,3 +67,13 @@ def test_thai_date(text, expected):
 ])
 def test_normalise_company(name, core, kind):
     assert normalise_company(name) == (core, kind)
+
+
+@pytest.mark.parametrize("raw,fixed", [
+    ("ห้างหุ้นส่วนจ\u0e4d\u0e32กัด", "ห้างหุ้นส่วนจำกัด"),
+    ("น\u0e49\u0e4d\u0e32", "น้ำ"),          # tone mark before nikhahit
+    ("น\u0e4d\u0e49\u0e32", "น้ำ"),          # tone mark after nikhahit
+    ("จำกัด", "จำกัด"),                      # already correct: unchanged
+])
+def test_split_sara_am_is_joined(raw, fixed):
+    assert normalise_thai_text(raw) == fixed

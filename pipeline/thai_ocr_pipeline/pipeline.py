@@ -13,6 +13,7 @@ from pathlib import Path
 from .extract import extract
 from .ingest import SourceFile, discover, load_pages
 from .ocr import OcrBackend, OcrError, PageCache
+from .thai import normalise_thai_text
 from .validate import CompanyMaster, clean_and_check
 
 log = logging.getLogger(__name__)
@@ -105,7 +106,7 @@ def run(input_dir: Path, out_dir: Path, backend: OcrBackend, cache_dir: Path | N
     docs, bidders, review = [], [], []
     for src in files:
         keys = [(src.sha256, p.number) for p in src.pages]
-        md = "\n\n".join(page_md.get(k, "") for k in keys)
+        md = normalise_thai_text("\n\n".join(page_md.get(k, "") for k in keys))
         (out_dir / "markdown" / f"{src.path.stem}.md").write_text(md, encoding="utf-8")
         e = extract(md)
         c = clean_and_check(e, master)

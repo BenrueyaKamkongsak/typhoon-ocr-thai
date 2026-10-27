@@ -24,6 +24,9 @@
     --stamp: #b3261e;      /* errors, like a red stamp */
     --ok: #2e7d4f;
     --hl: #e6f1f5;         /* table header fill */
+    --warn: #9a6200;       /* suspicious text */
+    --warn-bg: #fdf3dc;
+    --fix-bg: #e5f4ea;     /* auto-corrected text */
     --font: "IBM Plex Sans Thai", "Noto Sans Thai", "Leelawadee UI", system-ui, sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   }
@@ -31,6 +34,7 @@
     :root {
       --paper: #14181d; --sheet: #1c2229; --ink: #e7eaee; --muted: #9aa4b0; --rule: #2e3740;
       --accent: #5fb3cf; --accent-ink: #0d1418; --stamp: #f2867d; --ok: #7fcf9c; --hl: #22303a;
+      --warn: #e7b65c; --warn-bg: #3a2f17; --fix-bg: #1c3527;
       color-scheme: dark;
     }
   }
@@ -103,6 +107,35 @@
   .err-box { color: var(--stamp); font-size: 14px; }
   footer { font-size: 12px; color: var(--muted); }
   footer a { color: var(--muted); }
+
+  .pagebar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: end; border-bottom: 1px solid var(--rule); }
+  .pagebar .tabs { border-bottom: 0; }
+  .acts { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 6px; }
+  .acts button { padding: 5px 11px; font-size: 13px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; }
+  .badge { font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--rule); color: var(--muted); }
+  .badge.edit { border-color: var(--accent); color: var(--accent); }
+  .badge.auto { border-color: var(--ok); color: var(--ok); }
+  .badge.warn { border-color: var(--warn); color: var(--warn); }
+  .issues { margin: 0; padding: 8px 12px 8px 28px; font-size: 13px; background: var(--warn-bg); border-radius: 6px; color: var(--ink); }
+  .issues li + li { margin-top: 2px; }
+  .rendered[contenteditable=true] { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; caret-color: var(--accent); }
+  .rendered[contenteditable=true] td:focus-within, .rendered[contenteditable=true] th:focus-within { background: var(--hl); }
+  textarea.md-edit { width: 100%; min-height: 420px; font: 13px/1.6 var(--mono); padding: 10px; border: 2px solid var(--accent);
+    border-radius: 6px; background: var(--paper); color: var(--ink); resize: vertical; }
+  .edit-hint { font-size: 13px; color: var(--muted); margin: 0; }
+  mark.fix { background: var(--fix-bg); color: inherit; border-bottom: 2px solid var(--ok); padding: 0 1px; border-radius: 2px; }
+  mark.sus { background: var(--warn-bg); color: inherit; border-bottom: 2px dotted var(--warn); padding: 0 1px; border-radius: 2px; }
+  .learn { border: 1px solid var(--ok); background: var(--fix-bg); border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; font-size: 14px; }
+  .learn ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .learn label { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+  .learn code, .dict code { font: 13px var(--mono); background: var(--sheet); border: 1px solid var(--rule); border-radius: 4px; padding: 0 5px; }
+  .dict table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .dict th, .dict td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--rule); }
+  .dict th { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
+  .dict td.num { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .dict .wrapx { overflow-x: auto; }
+  .dict summary { font-size: 14px; color: var(--ink); font-weight: 500; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -141,6 +174,23 @@
       <span class="hint">ประกาศผู้ชนะการเสนอราคาที่สร้างขึ้นเพื่อทดสอบ มีตารางเซลล์ผสานและตราประทับทับลายเซ็น</span>
     </div>
     <div class="status" id="status" role="status" aria-live="polite"></div>
+  </section>
+
+
+  <section class="panel dict" aria-labelledby="dictlbl">
+    <details id="dictbox">
+      <summary id="dictlbl">คำแก้ที่ระบบจำไว้ <span id="dictcount" class="badge">0</span></summary>
+      <div style="display:grid;gap:10px;margin-top:12px">
+        <p class="hint">ทุกครั้งที่แก้คำในผล OCR ระบบจะถามว่าจะจำไว้ไหม คำที่จำแล้วจะถูกแก้ให้อัตโนมัติในเอกสารถัดไป (ไฮไลต์สีเขียว) เก็บไว้ในเบราว์เซอร์นี้ ส่งออกเป็นไฟล์เพื่อแชร์ให้ทีมได้</p>
+        <div class="wrapx"><table><thead><tr><th>OCR อ่านเป็น</th><th>แก้เป็น</th><th>ใช้แล้ว</th><th></th></tr></thead><tbody id="dictrows"></tbody></table></div>
+        <div class="row">
+          <button type="button" id="dictexport">ส่งออก .json</button>
+          <button type="button" id="dictimportbtn">นำเข้า .json</button>
+          <input type="file" id="dictimport" accept="application/json,.json" hidden>
+          <span class="hint" id="dictmsg" role="status" aria-live="polite"></span>
+        </div>
+      </div>
+    </details>
   </section>
 
   <section id="results" hidden>
@@ -190,7 +240,7 @@ Describe the image's main elements (people, objects, text), note any contextual 
 
   const $ = (id) => document.getElementById(id);
   const keyInput = $('apikey'), statusEl = $('status'), pagesEl = $('pages');
-  const pages = []; // { name, dataUrl, markdown, error, ms }
+  const pages = []; // { name, dataUrl, original, base, markdown, applied, edited, error, ms }
   let busy = false;
 
   if (window.pdfjsLib) {
@@ -309,7 +359,7 @@ Describe the image's main elements (people, objects, text), note any contextual 
         const p = pages[i];
         const s = performance.now();
         try {
-          p.markdown = await ocr(p.dataUrl, key);
+          setOcrResult(p, await ocr(p.dataUrl, key));
           ok++;
         } catch (err) {
           p.error = err.message;
@@ -329,6 +379,7 @@ Describe the image's main elements (people, objects, text), note any contextual 
       setStatus(err.message, 'err');
     } finally {
       busy = false; toggleInputs(false);
+      pages.forEach((_, k) => refreshPage(k));
     }
   }
   function toggleInputs(dis) { $('sample').disabled = dis; drop.setAttribute('aria-disabled', String(dis)); }
@@ -368,11 +419,314 @@ Describe the image's main elements (people, objects, text), note any contextual 
     return text.trim();
   }
 
+  // ---- Learned corrections (this browser only) ----
+  // Each rule: { wrong, right, uses, added }. Applied as exact text replacement to new OCR results.
+  const DICT_KEY = 'ocrCorrections';
+  let rules = [];
+  try { rules = JSON.parse(store.get(DICT_KEY) || '[]').filter((r) => r && r.wrong && typeof r.right === 'string'); } catch { rules = []; }
+  function saveRules() { store.set(DICT_KEY, rules.length ? JSON.stringify(rules) : ''); renderDict(); }
+
+  function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  // Replace only outside HTML tags, so attribute values are never touched.
+  function replaceInText(md, wrong, right) {
+    let n = 0;
+    const re = new RegExp(escapeRe(wrong), 'g');
+    const out = md.split(/(<[^>]*>)/).map((part) => (part.startsWith('<') ? part : part.replace(re, () => { n++; return right; }))).join('');
+    return { text: out, count: n };
+  }
+  // Longest rules first, so "ขอโต้ตอบ" wins over a shorter rule inside it.
+  function applyRules(md, onlyRules) {
+    const list = [...(onlyRules || rules)].sort((a, b) => b.wrong.length - a.wrong.length);
+    const applied = [];
+    let text = md;
+    for (const r of list) {
+      const res = replaceInText(text, r.wrong, r.right);
+      if (res.count) { text = res.text; applied.push({ wrong: r.wrong, right: r.right, count: res.count }); }
+    }
+    return { text, applied };
+  }
+  function countUse(applied) {
+    applied.forEach((a) => { const r = rules.find((x) => x.wrong === a.wrong); if (r) r.uses = (r.uses || 0) + a.count; });
+    if (applied.length) saveRules();
+  }
+
+  function renderDict() {
+    $('dictcount').textContent = String(rules.length);
+    const body = $('dictrows');
+    body.innerHTML = '';
+    if (!rules.length) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="4" class="hint">ยังไม่มีคำแก้ ลองแก้คำในผล OCR แล้วกดบันทึก</td>';
+      body.append(tr);
+      return;
+    }
+    rules.forEach((r, i) => {
+      const tr = document.createElement('tr');
+      const w = document.createElement('td'); const c1 = document.createElement('code'); c1.textContent = r.wrong; w.append(c1);
+      const g = document.createElement('td'); const c2 = document.createElement('code'); c2.textContent = r.right || '(ลบออก)'; g.append(c2);
+      const u = document.createElement('td'); u.className = 'num'; u.textContent = (r.uses || 0) + ' ครั้ง';
+      const d = document.createElement('td'); const b = document.createElement('button'); b.type = 'button'; b.textContent = 'ลบ';
+      b.setAttribute('aria-label', `ลบคำแก้ ${r.wrong}`);
+      b.addEventListener('click', () => { rules.splice(i, 1); saveRules(); });
+      d.append(b);
+      tr.append(w, g, u, d);
+      body.append(tr);
+    });
+  }
+  $('dictexport').addEventListener('click', () => {
+    download('ocr-corrections.json', JSON.stringify(rules, null, 2), 'application/json;charset=utf-8');
+  });
+  $('dictimportbtn').addEventListener('click', () => $('dictimport').click());
+  $('dictimport').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    try {
+      const data = JSON.parse((await f.text()).replace(/^﻿/, ''));
+      if (!Array.isArray(data)) throw new Error('ไฟล์ต้องเป็นรายการคำแก้');
+      let added = 0;
+      data.forEach((r) => {
+        if (!r || typeof r.wrong !== 'string' || typeof r.right !== 'string' || !r.wrong || r.wrong === r.right) return;
+        const ex = rules.find((x) => x.wrong === r.wrong);
+        if (ex) ex.right = r.right; else { rules.push({ wrong: r.wrong, right: r.right, uses: 0, added: Date.now() }); added++; }
+      });
+      saveRules();
+      $('dictmsg').textContent = `นำเข้าแล้ว เพิ่มใหม่ ${added} คำ`;
+    } catch (err) { $('dictmsg').textContent = 'นำเข้าไม่ได้: ' + err.message; }
+  });
+
+  // ---- Suggest rules from an edit: diff old vs new text by Thai words ----
+  const segmenter = (window.Intl && Intl.Segmenter) ? new Intl.Segmenter('th', { granularity: 'word' }) : null;
+  function plainText(md) {
+    const box = document.createElement('div');
+    box.innerHTML = renderMarkdown(md);
+    box.querySelectorAll('td,th').forEach((c) => c.append('\n'));
+    box.querySelectorAll('p,h1,h2,h3,h4,h5,h6,li,figure,tr,br').forEach((el) => el.after('\n'));
+    return box.textContent.replace(/[ \t]+/g, ' ');
+  }
+  function words(line) {
+    return segmenter ? [...segmenter.segment(line)].map((s) => s.segment) : line.split(/(\s+)/).filter(Boolean);
+  }
+  function lcsPairs(a, b) {
+    // Classic LCS table; inputs are small (one changed line at a time).
+    const n = a.length, m = b.length;
+    if (n * m > 2_000_000) return null;
+    const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    const ops = []; let i = 0, j = 0;
+    while (i < n || j < m) {
+      if (i < n && j < m && a[i] === b[j]) { ops.push(['=', a[i]]); i++; j++; }
+      else if (j < m && (i === n || dp[i][j + 1] >= dp[i + 1][j])) { ops.push(['+', b[j]]); j++; }
+      else { ops.push(['-', a[i]]); i++; }
+    }
+    return ops;
+  }
+  function changedRuns(ops) {
+    const out = []; let del = '', ins = '';
+    const flush = () => { if (del || ins) out.push([del, ins]); del = ''; ins = ''; };
+    for (const [op, t] of ops) {
+      if (op === '=') { if (t.trim() === '' && (del || ins)) { flush(); } else flush(); }
+      else if (op === '-') del += t; else ins += t;
+    }
+    flush();
+    return out;
+  }
+  const NUMBERISH = /^(?:[\d๐-๙.,\s()\-]|ศูนย์|หนึ่ง|เอ็ด|สอง|ยี่|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า|สิบ|ร้อย|พัน|หมื่น|แสน|ล้าน|บาท|สตางค์|ถ้วน|ตรง)+$/;
+  function suggestCorrections(oldMd, newMd) {
+    const A = plainText(oldMd).split('\n').map((l) => l.trim()).filter(Boolean);
+    const B = plainText(newMd).split('\n').map((l) => l.trim()).filter(Boolean);
+    const lineOps = lcsPairs(A, B) || [];
+    const pairs = [];
+    // An edited line shows up as a removed and an added line next to each other (either order):
+    // pair them up within each run of changes, then diff the pair word by word.
+    let dels = [], adds = [];
+    const flushLines = () => {
+      for (let k = 0; k < Math.min(dels.length, adds.length); k++) {
+        const ops = lcsPairs(words(dels[k]), words(adds[k]));
+        if (ops) changedRuns(ops).forEach((p) => pairs.push(p));
+      }
+      dels = []; adds = [];
+    };
+    for (const [op, line] of lineOps) {
+      if (op === '-') dels.push(line);
+      else if (op === '+') adds.push(line);
+      else flushLines();
+    }
+    flushLines();
+    const seen = new Set();
+    return pairs
+      .map(([w, r]) => [w.trim(), r.trim()])
+      .filter(([w, r]) => w && w !== r && w.length <= 40 && r.length <= 40)
+      // Numbers and amounts in words belong to one document; learning "แปด → เก้า" would corrupt every amount.
+      .filter(([w, r]) => !NUMBERISH.test(w) && !NUMBERISH.test(r))
+      .filter(([w]) => /[฀-๿a-zA-Z]/.test(w))
+      .filter(([w, r]) => { const k = w + '\u0000' + r; if (seen.has(k)) return false; seen.add(k); return true; })
+      .map(([wrong, right]) => ({ wrong, right }));
+  }
+
+  // ---- HTML (edited in place) -> Markdown, keeping tables as HTML like Typhoon does ----
+  function escHtml(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function inlineMd(node) {
+    let out = '';
+    node.childNodes.forEach((n) => {
+      if (n.nodeType === 3) { out += n.nodeValue; return; }
+      if (n.nodeType !== 1) return;
+      const tag = n.tagName.toLowerCase();
+      if (tag === 'br') out += '\n';
+      else if (tag === 'span' && n.classList.contains('pgnum')) out += `<page_number>${n.textContent.replace(/^หน้า\s*/, '').trim()}</page_number>`;
+      else if (tag === 'strong' || tag === 'b') { const t = inlineMd(n); out += t.trim() ? `**${t}**` : t; }
+      else if (tag === 'em' || tag === 'i') { const t = inlineMd(n); out += t.trim() ? `*${t}*` : t; }
+      else if (tag === 'code') out += '`' + n.textContent + '`';
+      else if (tag === 'a') out += `[${inlineMd(n)}](${n.getAttribute('href') || ''})`;
+      else if (tag === 'div' || tag === 'p') out += '\n' + inlineMd(n) + '\n';
+      else out += inlineMd(n); // mark, span, font...: keep the text only
+    });
+    return out;
+  }
+  function tableHtml(t) {
+    const rows = [...t.rows].map((tr) => {
+      const cells = [...tr.cells].map((c) => {
+        const tag = c.tagName.toLowerCase() === 'th' ? 'th' : 'td';
+        const rs = c.rowSpan > 1 ? ` rowspan="${c.rowSpan}"` : '';
+        const cs = c.colSpan > 1 ? ` colspan="${c.colSpan}"` : '';
+        const text = escHtml(inlineMd(c).replace(/\s*\n\s*/g, ' ').trim());
+        return `<${tag}${rs}${cs}>${text}</${tag}>`;
+      }).join('');
+      return `<tr>${cells}</tr>`;
+    });
+    return `<table>\n${rows.join('\n')}\n</table>`;
+  }
+  function htmlToMarkdown(root) {
+    const blocks = [];
+    const push = (s) => { s = s.replace(/\n{3,}/g, '\n\n').trim(); if (s) blocks.push(s); };
+    root.childNodes.forEach((n) => {
+      if (n.nodeType === 3) { push(n.nodeValue); return; }
+      if (n.nodeType !== 1) return;
+      const tag = n.tagName.toLowerCase();
+      const h = /^h([1-6])$/.exec(tag);
+      if (h) push('#'.repeat(+h[1]) + ' ' + inlineMd(n).replace(/\n+/g, ' ').trim());
+      else if (tag === 'table') push(tableHtml(n));
+      else if (tag === 'figure') push(`<figure>${escHtml(n.textContent.trim())}</figure>`);
+      else if (tag === 'ul' || tag === 'ol') push([...n.children].map((li, k) => (tag === 'ol' ? `${k + 1}. ` : '- ') + inlineMd(li).trim()).join('\n'));
+      else if (tag === 'hr') push('---');
+      else if (tag === 'blockquote') push(inlineMd(n).trim().split('\n').map((l) => '> ' + l).join('\n'));
+      else if (tag === 'pre') push('```\n' + n.textContent + '\n```');
+      else if (n.querySelector && n.querySelector('table')) push(htmlToMarkdown(n)); // a wrapper div around a table
+      else push(inlineMd(n));
+    });
+    return blocks.join('\n\n');
+  }
+
+  // ---- Checks that point at text worth a second look ----
+  const DIGIT_W = { 'ศูนย์': 0, 'หนึ่ง': 1, 'เอ็ด': 1, 'สอง': 2, 'ยี่': 2, 'สาม': 3, 'สี่': 4, 'ห้า': 5, 'หก': 6, 'เจ็ด': 7, 'แปด': 8, 'เก้า': 9 };
+  const PLACE_W = { 'สิบ': 10, 'ร้อย': 100, 'พัน': 1000, 'หมื่น': 10000, 'แสน': 100000 };
+  const W_TOKEN = new RegExp(Object.keys({ ...DIGIT_W, ...PLACE_W }).sort((a, b) => b.length - a.length).join('|'), 'y');
+  function belowMillion(s) {
+    let total = 0, pending = null, i = 0;
+    while (i < s.length) {
+      W_TOKEN.lastIndex = i;
+      const m = W_TOKEN.exec(s);
+      if (!m) return NaN;
+      const t = m[0]; i += t.length;
+      if (t in DIGIT_W) pending = DIGIT_W[t];
+      else { total += (pending === null ? 1 : pending) * PLACE_W[t]; pending = null; }
+    }
+    return total + (pending || 0);
+  }
+  function wordsToInt(s) {
+    const k = s.lastIndexOf('ล้าน');
+    if (k < 0) return belowMillion(s);
+    const head = s.slice(0, k), tail = s.slice(k + 4);
+    return (head ? wordsToInt(head) : 1) * 1e6 + (tail ? belowMillion(tail) : 0);
+  }
+  // 'สี่แสนแปดหมื่นเก้าพันบาทถ้วน' -> 48900000 (satang); NaN if it isn't an amount in words
+  function bahtWordsToSatang(text) {
+    let s = text.replace(/[\s()]/g, '').replace(/ถ้วน|ตรง/g, '');
+    if (!/บาท|สตางค์/.test(s)) return NaN;
+    let baht = '', satang = '';
+    if (s.includes('บาท')) { [baht, satang] = [s.slice(0, s.indexOf('บาท')), s.slice(s.indexOf('บาท') + 3)]; }
+    else satang = s;
+    satang = satang.replace('สตางค์', '');
+    const b = baht ? wordsToInt(baht) : 0, st = satang ? wordsToInt(satang) : 0;
+    if (Number.isNaN(b) || Number.isNaN(st) || st >= 100) return NaN;
+    return b * 100 + st;
+  }
+  const TH_DIG = { '๐': '0', '๑': '1', '๒': '2', '๓': '3', '๔': '4', '๕': '5', '๖': '6', '๗': '7', '๘': '8', '๙': '9' };
+  const toArabic = (s) => s.replace(/[๐-๙]/g, (d) => TH_DIG[d]);
+  const fmt = (satang) => (satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const ORPHAN = /(?<![ก-ฮัำ-ฺ็-๎])[ัำ-ฺ็-๎]/g;
+
+  function findIssues(md) {
+    const text = plainText(md);
+    const issues = [], spans = [];
+    const AMT = /([\d๐-๙][\d๐-๙,]*(?:\.[\d๐-๙]+)?)\s*บาท\s*\(([^)]*บาท[^)]*)\)/g;
+    let m;
+    while ((m = AMT.exec(text))) {
+      const digits = Math.round(parseFloat(toArabic(m[1]).replace(/,/g, '')) * 100);
+      const words = bahtWordsToSatang(m[2]);
+      if (Number.isNaN(words)) { issues.push(`อ่านจำนวนเงินตัวหนังสือไม่ออก: "${m[2].trim()}"`); spans.push(m[2].trim()); }
+      else if (words !== digits) { issues.push(`วงเงินตัวเลข ${fmt(digits)} บาท ไม่ตรงกับตัวหนังสือ (${fmt(words)} บาท)`); spans.push(m[2].trim()); }
+    }
+    const orphans = (text.match(ORPHAN) || []).length;
+    if (orphans) issues.push(`พบสระหรือวรรณยุกต์ลอย ${orphans} จุด (มักเกิดจาก OCR อ่านผิด)`);
+    return { issues, spans };
+  }
+
+  // Wrap matches inside text nodes (skipping existing marks) with <mark>.
+  function markText(root, test, cls, title) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => (n.parentElement && n.parentElement.closest('mark') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+    });
+    const nodes = []; while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach((node) => {
+      const ranges = test(node.nodeValue);
+      if (!ranges.length) return;
+      const frag = document.createDocumentFragment();
+      let last = 0;
+      ranges.sort((a, b) => a[0] - b[0]).forEach(([s, e, t]) => {
+        if (s < last) return;
+        frag.append(node.nodeValue.slice(last, s));
+        const mk = document.createElement('mark'); mk.className = cls; mk.textContent = node.nodeValue.slice(s, e);
+        mk.title = t || title; frag.append(mk); last = e;
+      });
+      frag.append(node.nodeValue.slice(last));
+      node.replaceWith(frag);
+    });
+  }
+  function findAll(hay, needle) {
+    const out = []; if (!needle) return out;
+    let i = hay.indexOf(needle);
+    while (i >= 0) { out.push([i, i + needle.length]); i = hay.indexOf(needle, i + needle.length); }
+    return out;
+  }
+  function decorate(div, p) {
+    (p.applied || []).forEach((a) => markText(div, (t) => findAll(t, a.right).map(([s, e]) => [s, e, `แก้อัตโนมัติจาก "${a.wrong}"`]), 'fix', ''));
+    const { spans } = findIssues(p.markdown);
+    spans.forEach((sp) => markText(div, (t) => findAll(t, sp), 'sus', 'ตรวจไขว้ไม่ผ่าน'));
+    markText(div, (t) => [...t.matchAll(ORPHAN)].map((m) => [Math.max(0, m.index - 1), m.index + m[0].length]), 'sus', 'สระหรือวรรณยุกต์ลอย');
+  }
+
   // ---- Rendering ----
   function renderMarkdown(md) {
     const prepped = md.replace(/<page_number>([\s\S]*?)<\/page_number>/g, '<span class="pgnum">หน้า $1</span>');
     const html = window.marked ? marked.parse(prepped, { gfm: true, breaks: false }) : prepped.replace(/</g, '&lt;');
     return window.DOMPurify ? DOMPurify.sanitize(html, { ADD_TAGS: ['figure'] }) : html;
+  }
+  // Thai text that looks right but has the wrong code points: sara am written as nikhahit + sara aa
+  // ("จํากัด" vs "จำกัด"), with or without a tone mark between. Breaks search and name matching.
+  function normaliseThai(md) {
+    let n = 0;
+    const text = md.replace(/([่-๋]?)ํ([่-๋]?)า/g, (_, a, b) => { n++; return a + b + 'ำ'; });
+    return { text, count: n };
+  }
+  // A fresh OCR result: keep the raw text, fix code points, then apply learned corrections on top.
+  function setOcrResult(p, raw) {
+    p.original = raw;
+    const norm = normaliseThai(raw);
+    const { text, applied } = applyRules(norm.text);
+    p.normalised = norm.count;
+    p.base = text; p.markdown = text; p.applied = applied; p.edited = false; p.editing = null; p.learn = null;
+    countUse(applied);
   }
   function renderPage(p, i) {
     const el = document.createElement('article');
@@ -380,32 +734,158 @@ Describe the image's main elements (people, objects, text), note any contextual 
     el.innerHTML = `
       <figure class="scan"><img alt=""><figcaption><span class="nm"></span><span class="tm"></span></figcaption></figure>
       <div class="res">
-        <div class="tabs" role="tablist">
-          <button type="button" role="tab" aria-selected="true" data-v="r">ผลลัพธ์</button>
-          <button type="button" role="tab" aria-selected="false" data-v="m">Markdown</button>
+        <div class="pagebar">
+          <div class="tabs" role="tablist">
+            <button type="button" role="tab" aria-selected="true" data-v="r">ผลลัพธ์</button>
+            <button type="button" role="tab" aria-selected="false" data-v="m">Markdown</button>
+          </div>
+          <div class="acts"></div>
         </div>
+        <div class="badges"></div>
+        <div class="extra"></div>
         <div class="view"></div>
       </div>`;
     el.querySelector('img').src = p.dataUrl;
     el.querySelector('img').alt = 'ภาพเอกสาร ' + p.name;
     el.querySelector('.nm').textContent = p.name;
     el.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
-      el.querySelectorAll('.tabs button').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
+      if (p.editing) return;
       p.view = b.dataset.v; refreshPage(i);
     }));
-    fillView(el, p);
+    fillView(el, p, i);
     return el;
   }
-  function fillView(el, p) {
-    const view = el.querySelector('.view');
-    view.innerHTML = '';
-    if (p.error) { const d = document.createElement('p'); d.className = 'err-box'; d.textContent = p.error; view.append(d); return; }
-    if (p.markdown == null) { view.innerHTML = '<div class="pending"><span class="spin"></span>รอคิวอ่าน…</div>'; return; }
-    if (p.view === 'm') { const pre = document.createElement('pre'); pre.className = 'raw'; pre.textContent = p.markdown; view.append(pre); }
-    else { const d = document.createElement('div'); d.className = 'rendered'; d.innerHTML = renderMarkdown(p.markdown); view.append(d); }
-    if (p.ms) el.querySelector('.tm').textContent = (p.ms / 1000).toFixed(1) + ' วินาที';
+  function btn(label, onClick, cls) {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
+    if (cls) b.className = cls; b.addEventListener('click', onClick); return b;
   }
-  function refreshPage(i) { const el = $('page-' + i); if (el) fillView(el, pages[i]); }
+  function fillView(el, p, i) {
+    const view = el.querySelector('.view'), acts = el.querySelector('.acts');
+    const badges = el.querySelector('.badges'), extra = el.querySelector('.extra');
+    view.innerHTML = ''; acts.innerHTML = ''; badges.innerHTML = ''; extra.innerHTML = '';
+    el.querySelectorAll('.tabs button').forEach((x) => {
+      x.setAttribute('aria-selected', String(x.dataset.v === (p.view === 'm' ? 'm' : 'r')));
+      x.disabled = !!p.editing;
+    });
+    if (p.ms) el.querySelector('.tm').textContent = (p.ms / 1000).toFixed(1) + ' วินาที';
+    if (p.error) {
+      const d = document.createElement('p'); d.className = 'err-box'; d.textContent = p.error; view.append(d);
+      if (!busy) acts.append(btn('อ่านหน้านี้ใหม่', () => rerun(i)));
+      return;
+    }
+    if (p.markdown == null) { view.innerHTML = '<div class="pending"><span class="spin"></span>รอคิวอ่าน…</div>'; return; }
+
+    // Editing
+    if (p.editing) {
+      acts.append(btn('บันทึก', () => saveEdit(i), 'primary'), btn('ยกเลิก', () => { p.editing = null; refreshPage(i); }));
+      const hint = document.createElement('p'); hint.className = 'edit-hint';
+      if (p.editing === 'm') {
+        hint.textContent = 'แก้ Markdown ได้โดยตรง ตารางเป็น HTML ตามรูปแบบของ Typhoon';
+        const ta = document.createElement('textarea'); ta.className = 'md-edit'; ta.value = p.markdown;
+        ta.id = 'md-edit-' + i; ta.setAttribute('aria-label', 'แก้ไข Markdown ของ ' + p.name); ta.spellcheck = false;
+        view.append(hint, ta); ta.focus();
+      } else {
+        hint.textContent = 'คลิกที่ข้อความหรือช่องในตารางแล้วพิมพ์แก้ได้เลย เสร็จแล้วกดบันทึก';
+        const d = document.createElement('div'); d.className = 'rendered'; d.contentEditable = 'true';
+        d.setAttribute('role', 'textbox'); d.setAttribute('aria-multiline', 'true'); d.setAttribute('aria-label', 'แก้ไขผลลัพธ์ของ ' + p.name);
+        d.innerHTML = renderMarkdown(p.markdown);
+        view.append(hint, d); d.focus();
+      }
+      return;
+    }
+
+    acts.append(btn('แก้ไข', () => { p.editing = p.view === 'm' ? 'm' : 'r'; p.learn = null; refreshPage(i); }));
+    if (p.edited || p.markdown !== p.base) acts.append(btn('คืนค่าเดิม', () => {
+      // Back to the OCR result with every correction learned so far.
+      const r = applyRules(normaliseThai(p.original).text);
+      p.markdown = p.base = r.text; p.applied = r.applied; p.edited = false; p.learn = null; refreshPage(i);
+    }));
+    if (!busy) acts.append(btn('อ่านใหม่', () => rerun(i)));
+
+    if (p.edited) { const b = document.createElement('span'); b.className = 'badge edit'; b.textContent = 'แก้ไขแล้ว'; badges.append(b); }
+    if (p.normalised) { const b = document.createElement('span'); b.className = 'badge auto'; b.textContent = `ปรับสระอำ ${p.normalised} จุด`; b.title = 'OCR เขียนสระอำเป็น ํ + า ซึ่งดูเหมือนกันแต่ค้นหาไม่เจอ ระบบแก้เป็น ำ ให้แล้ว'; badges.append(b); }
+    const autoN = (p.applied || []).reduce((s, a) => s + a.count, 0);
+    if (autoN) { const b = document.createElement('span'); b.className = 'badge auto'; b.textContent = `แก้อัตโนมัติ ${autoN} จุด`; b.title = p.applied.map((a) => `${a.wrong} → ${a.right}`).join('\n'); badges.append(b); }
+    const { issues } = findIssues(p.markdown);
+    if (issues.length) {
+      const b = document.createElement('span'); b.className = 'badge warn'; b.textContent = `น่าตรวจ ${issues.length} จุด`; badges.append(b);
+      const ul = document.createElement('ul'); ul.className = 'issues';
+      issues.forEach((t) => { const li = document.createElement('li'); li.textContent = t; ul.append(li); });
+      extra.append(ul);
+    }
+    if (p.learn && p.learn.length) extra.append(learnBox(p, i));
+
+    if (p.view === 'm') { const pre = document.createElement('pre'); pre.className = 'raw'; pre.textContent = p.markdown; view.append(pre); }
+    else { const d = document.createElement('div'); d.className = 'rendered'; d.innerHTML = renderMarkdown(p.markdown); decorate(d, p); view.append(d); }
+  }
+  function saveEdit(i) {
+    const p = pages[i], el = $('page-' + i);
+    const before = p.markdown;
+    let after;
+    if (p.editing === 'm') after = el.querySelector('textarea.md-edit').value.trim();
+    else after = htmlToMarkdown(el.querySelector('.rendered[contenteditable]'));
+    p.editing = null;
+    if (after !== before) {
+      p.markdown = after; p.edited = after !== p.base;
+      const known = new Set(rules.map((r) => r.wrong + '\u0000' + r.right));
+      p.learn = suggestCorrections(before, after).filter((s) => !known.has(s.wrong + '\u0000' + s.right));
+    }
+    refreshPage(i);
+  }
+  function learnBox(p, i) {
+    const box = document.createElement('div'); box.className = 'learn';
+    const h = document.createElement('strong'); h.textContent = 'จำคำที่แก้ไว้ใช้กับเอกสารถัดไปไหม?';
+    const ul = document.createElement('ul');
+    p.learn.forEach((s, k) => {
+      const li = document.createElement('li'); const lab = document.createElement('label');
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = `learn-${i}-${k}`;
+      cb.checked = [...s.wrong].length >= 3; // very short fragments are risky to replace everywhere
+      const a = document.createElement('code'); a.textContent = s.wrong;
+      const b = document.createElement('code'); b.textContent = s.right || '(ลบออก)';
+      lab.append(cb, a, document.createTextNode(' → '), b);
+      li.append(lab); ul.append(li);
+    });
+    const others = pages.filter((q, k) => k !== i && q.markdown != null).length;
+    const row = document.createElement('div'); row.className = 'row';
+    row.append(
+      btn(others ? `จำคำที่เลือก และแก้ในอีก ${others} หน้าด้วย` : 'จำคำที่เลือก', () => {
+        const chosen = p.learn.filter((_, k) => box.querySelector(`#learn-${i}-${k}`).checked);
+        chosen.forEach((s) => {
+          const ex = rules.find((r) => r.wrong === s.wrong);
+          if (ex) ex.right = s.right; else rules.push({ wrong: s.wrong, right: s.right, uses: 0, added: Date.now() });
+        });
+        saveRules();
+        // Apply the new rules to the other pages already on screen.
+        pages.forEach((q, k) => {
+          if (k === i || q.markdown == null) return;
+          const res = applyRules(q.markdown, chosen);
+          if (res.applied.length) {
+            q.markdown = res.text; q.base = applyRules(q.base, chosen).text;
+            q.applied = [...(q.applied || []), ...res.applied]; countUse(res.applied); refreshPage(k);
+          }
+        });
+        p.learn = null; refreshPage(i);
+      }, 'primary'),
+      btn('ไม่ต้องจำ', () => { p.learn = null; refreshPage(i); }),
+    );
+    box.append(h, ul, row);
+    return box;
+  }
+  async function rerun(i) {
+    const key = keyInput.value.trim();
+    if (!key) { setStatus('ใส่ Typhoon API key ก่อน แล้วลองอีกครั้ง', 'err'); keyInput.focus(); return; }
+    if (busy) return;
+    const p = pages[i];
+    busy = true; toggleInputs(true);
+    p.error = null; p.markdown = null; refreshPage(i);
+    setStatus(`Typhoon กำลังอ่าน ${p.name} ใหม่…`, 'busy');
+    const s = performance.now();
+    try { setOcrResult(p, await ocr(p.dataUrl, key)); setStatus('อ่านใหม่เสร็จแล้ว', 'ok'); }
+    catch (err) { p.error = err.message; setStatus(err.message, 'err'); }
+    finally { p.ms = performance.now() - s; busy = false; toggleInputs(false); pages.forEach((_, k) => refreshPage(k)); }
+  }
+  function refreshPage(i) { const el = $('page-' + i); if (el) fillView(el, pages[i], i); }
+  renderDict();
 
   // ---- Export ----
   function allMarkdown() {
@@ -465,7 +945,7 @@ Describe the image's main elements (people, objects, text), note any contextual 
   });
 
   // Exposed for automated checks only.
-  window.__ocrTest = { tableToRows, allTablesCsv, pages };
+  window.__ocrTest = { tableToRows, allTablesCsv, pages, htmlToMarkdown, suggestCorrections, bahtWordsToSatang, applyRules, findIssues, normaliseThai, get rules() { return rules; } };
 })();
 </script>
 </body>
