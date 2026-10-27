@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Typhoon OCR ภาษาไทย</title>
+<meta name="description" content="แปลงเอกสารสแกนภาษาไทยเป็นข้อความและตาราง ด้วย Typhoon OCR">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="./vendor/pdf.min.js"></script>
+<script src="./vendor/marked.min.js"></script>
+<script src="./vendor/purify.min.js"></script>
+<style>
+  /* Layout: a work bench. Left rail = scanned page, right = what the model read; one row per page. */
+  :root {
+    --paper: #f6f4ef;      /* page ground, like scanner glass */
+    --sheet: #ffffff;      /* cards and result surface */
+    --ink: #1d232b;        /* body text */
+    --muted: #616a76;      /* secondary text */
+    --rule: #dcd8cf;       /* hairlines */
+    --accent: #1f6f8b;     /* Typhoon-ish sea blue */
+    --accent-ink: #ffffff;
+    --stamp: #b3261e;      /* errors, like a red stamp */
+    --ok: #2e7d4f;
+    --hl: #e6f1f5;         /* table header fill */
+    --font: "IBM Plex Sans Thai", "Noto Sans Thai", "Leelawadee UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #14181d; --sheet: #1c2229; --ink: #e7eaee; --muted: #9aa4b0; --rule: #2e3740;
+      --accent: #5fb3cf; --accent-ink: #0d1418; --stamp: #f2867d; --ok: #7fcf9c; --hl: #22303a;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--paper); color: var(--ink); font: 15px/1.65 var(--font); }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 28px max(16px, env(safe-area-inset-left)) 64px max(16px, env(safe-area-inset-right)); display: grid; gap: 22px; }
+
+  header { display: grid; gap: 6px; }
+  h1 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -.01em; text-wrap: balance; }
+  h1 small { font-size: 14px; font-weight: 500; color: var(--accent); margin-left: 8px; letter-spacing: .02em; }
+  .lede { margin: 0; color: var(--muted); max-width: 70ch; }
+
+  .panel { background: var(--sheet); border: 1px solid var(--rule); border-radius: 10px; padding: 18px; display: grid; gap: 14px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  label.lbl { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  input[type=password], input[type=text] {
+    font: 14px var(--mono); padding: 9px 11px; border: 1px solid var(--rule); border-radius: 7px;
+    background: var(--paper); color: var(--ink); min-width: 0; flex: 1 1 260px;
+  }
+  input:focus-visible, button:focus-visible, .drop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button {
+    font: 500 14px var(--font); padding: 9px 16px; border-radius: 7px; border: 1px solid var(--rule);
+    background: var(--sheet); color: var(--ink); cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .hint { font-size: 13px; color: var(--muted); margin: 0; }
+  .hint a { color: var(--accent); }
+  details summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+
+  .drop {
+    border: 2px dashed var(--rule); border-radius: 10px; padding: 34px 18px; text-align: center;
+    display: grid; gap: 8px; justify-items: center; cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .drop.over { border-color: var(--accent); background: var(--hl); }
+  .drop strong { font-size: 17px; font-weight: 600; }
+
+  .status { font-size: 14px; display: flex; gap: 8px; align-items: center; min-height: 22px; }
+  .status.err { color: var(--stamp); }
+  .status.ok { color: var(--ok); }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; }
+  .pages { display: grid; gap: 18px; }
+  .page { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; background: var(--sheet);
+    border: 1px solid var(--rule); border-radius: 10px; padding: 14px; }
+  @media (max-width: 860px) { .page { grid-template-columns: minmax(0, 1fr); } }
+  .page figure.scan { margin: 0; display: grid; gap: 6px; align-content: start; }
+  .page figure.scan img { width: 100%; border: 1px solid var(--rule); border-radius: 6px; background: #fff; }
+  .page figure.scan figcaption { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums; }
+  .res { min-width: 0; display: grid; gap: 10px; align-content: start; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--rule); }
+  .tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 7px 12px; background: none; color: var(--muted); }
+  .tabs button[aria-selected=true] { color: var(--ink); border-bottom-color: var(--accent); }
+  .view { min-width: 0; max-height: 720px; overflow: auto; }
+  .rendered { font-size: 15px; }
+  .rendered h1, .rendered h2, .rendered h3 { font-size: 17px; margin: 14px 0 6px; }
+  .rendered p { margin: 0 0 10px; }
+  .rendered table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 10px 0; font-variant-numeric: tabular-nums; }
+  .rendered th, .rendered td { border: 1px solid var(--rule); padding: 6px 8px; vertical-align: top; }
+  .rendered th { background: var(--hl); font-weight: 600; }
+  .rendered figure { margin: 10px 0; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--hl); border-radius: 0 6px 6px 0; font-size: 14px; }
+  .rendered .pgnum { display: inline-block; font: 12px var(--mono); color: var(--muted); border: 1px solid var(--rule); border-radius: 4px; padding: 0 6px; }
+  pre.raw { margin: 0; white-space: pre-wrap; word-break: break-word; font: 13px/1.6 var(--mono); }
+  .pending { color: var(--muted); font-size: 14px; display: flex; gap: 10px; align-items: center; }
+  .spin { width: 14px; height: 14px; border: 2px solid var(--rule); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+  .err-box { color: var(--stamp); font-size: 14px; }
+  footer { font-size: 12px; color: var(--muted); }
+  footer a { color: var(--muted); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Typhoon OCR <span style="white-space:nowrap">ภาษาไทย</span> <small>สแกน → ข้อความ + ตาราง</small></h1>
+    <p class="lede">วางรูปหรือ PDF เอกสารภาษาไทย แล้วได้ข้อความกับตารางที่แก้ไขและนำไปใช้ต่อได้ ตารางที่มีเซลล์ผสานก็อ่านออก ใช้โมเดล Typhoon OCR จาก SCB 10X</p>
+  </header>
+
+  <section class="panel" aria-labelledby="keylbl">
+    <label class="lbl" id="keylbl" for="apikey">Typhoon API key</label>
+    <div class="row">
+      <input type="password" id="apikey" placeholder="วาง API key ที่นี่" autocomplete="off" spellcheck="false">
+      <button type="button" id="togglekey">แสดง</button>
+      <button type="button" id="clearkey">ลบ key</button>
+    </div>
+    <p class="hint">ยังไม่มี key? สมัครฟรีที่ <a href="https://playground.opentyphoon.ai" target="_blank" rel="noopener">playground.opentyphoon.ai</a> · key เก็บไว้เฉพาะในเบราว์เซอร์นี้ และส่งไปที่ api.opentyphoon.ai เท่านั้น</p>
+    <details>
+      <summary>ตั้งค่าเพิ่มเติม</summary>
+      <div class="row" style="margin-top:10px">
+        <input type="text" id="model" value="typhoon-ocr" aria-label="ชื่อโมเดล">
+        <input type="text" id="baseurl" value="https://api.opentyphoon.ai/v1" aria-label="API base URL">
+      </div>
+    </details>
+  </section>
+
+  <section class="panel">
+    <div class="drop" id="drop" tabindex="0" role="button" aria-label="เลือกไฟล์เอกสาร">
+      <strong>ลากรูปหรือ PDF มาวางที่นี่</strong>
+      <span class="hint">หรือคลิกเพื่อเลือกไฟล์ · JPG, PNG, WebP, PDF (สูงสุด 20 หน้า)</span>
+      <input type="file" id="file" accept="image/*,application/pdf" multiple hidden>
+    </div>
+    <div class="row">
+      <button type="button" id="sample">ลองเอกสารตัวอย่าง</button>
+      <span class="hint">ประกาศผู้ชนะการเสนอราคาที่สร้างขึ้นเพื่อทดสอบ มีตารางเซลล์ผสานและตราประทับทับลายเซ็น</span>
+    </div>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+  </section>
+
+  <section id="results" hidden>
+    <div class="toolbar">
+      <strong id="summary"></strong>
+      <div class="row">
+        <button type="button" id="copyall">คัดลอก Markdown ทั้งหมด</button>
+        <button type="button" id="dlmd">ดาวน์โหลด .md</button>
+        <button type="button" id="dlcsv">ดาวน์โหลดตาราง .csv</button>
+      </div>
+    </div>
+    <div class="pages" id="pages" style="margin-top:14px"></div>
+  </section>
+
+  <footer>ใช้โมเดล <a href="https://huggingface.co/scb10x/typhoon-ocr1.5-2b" target="_blank" rel="noopener">Typhoon OCR</a> (Apache-2.0) ผ่าน API ของ opentyphoon.ai · หน้านี้ไม่มีเซิร์ฟเวอร์ของตัวเอง ไฟล์ถูกส่งไปที่ Typhoon โดยตรงจากเบราว์เซอร์ของคุณ</footer>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const MAX_DIM = 1800;      // longest side sent to the model (same as the official client)
+  const MAX_PAGES = 20;
+  // Prompt of the official typhoon-ocr client (task_type "v1.5", figure_language "Thai").
+  const PROMPT = `Extract all text from the image.
+
+
+Instructions:
+- Only return the clean Markdown.
+- Do not include any explanation or extra text.
+- You must include all information on the page.
+
+
+Formatting Rules:
+- Tables: Render tables using <table>...</table> in clean HTML format.
+- Equations: Render equations using LaTeX syntax with inline ($...$) and block ($$...$$).
+- Images/Charts/Diagrams: Wrap any clearly defined visual areas (e.g. charts, diagrams, pictures) in:
+
+
+<figure>
+Describe the image's main elements (people, objects, text), note any contextual clues (place, event, culture), mention visible text and its meaning, provide deeper analysis when relevant (especially for financial charts, graphs, or documents), comment on style or architecture if relevant, then give a concise overall summary. Describe in Thai.
+</figure>
+
+
+- Page Numbers: Wrap page numbers in <page_number>...</page_number> (e.g., <page_number>14</page_number>).
+- Checkboxes: Use ☐ for unchecked and ☑ for checked boxes.
+    `;
+
+  const $ = (id) => document.getElementById(id);
+  const keyInput = $('apikey'), statusEl = $('status'), pagesEl = $('pages');
+  const pages = []; // { name, dataUrl, markdown, error, ms }
+  let busy = false;
+
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js';
+  }
+
+  // ---- API key (this browser only) ----
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch {} },
+  };
+  keyInput.value = store.get('typhoonKey') || '';
+  keyInput.addEventListener('input', () => store.set('typhoonKey', keyInput.value.trim()));
+  $('togglekey').addEventListener('click', (e) => {
+    const show = keyInput.type === 'password';
+    keyInput.type = show ? 'text' : 'password';
+    e.target.textContent = show ? 'ซ่อน' : 'แสดง';
+  });
+  $('clearkey').addEventListener('click', () => { keyInput.value = ''; store.set('typhoonKey', ''); keyInput.focus(); });
+
+  function setStatus(text, kind) {
+    statusEl.className = 'status' + (kind ? ' ' + kind : '');
+    statusEl.innerHTML = '';
+    if (kind === 'busy') { const s = document.createElement('span'); s.className = 'spin'; statusEl.append(s); }
+    statusEl.append(document.createTextNode(text));
+  }
+
+  // ---- Input: files, drag-and-drop, sample ----
+  const drop = $('drop'), fileInput = $('file');
+  drop.addEventListener('click', () => fileInput.click());
+  drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+  fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFiles([...fileInput.files]); fileInput.value = ''; });
+  ['dragenter', 'dragover'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', (e) => { if (e.dataTransfer.files.length) handleFiles([...e.dataTransfer.files]); });
+  $('sample').addEventListener('click', async () => {
+    try {
+      const res = await fetch('./sample-th.jpg');
+      if (!res.ok) throw new Error('โหลดเอกสารตัวอย่างไม่ได้ (' + res.status + ')');
+      const blob = await res.blob();
+      handleFiles([new File([blob], 'ตัวอย่าง-ประกาศผู้ชนะ.jpg', { type: 'image/jpeg' })]);
+    } catch (err) { setStatus(err.message, 'err'); }
+  });
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('อ่านไฟล์รูปนี้ไม่ได้'));
+      img.src = src;
+    });
+  }
+  function toJpeg(source, w, h) {
+    const scale = Math.min(1, MAX_DIM / Math.max(w, h));
+    const c = document.createElement('canvas');
+    c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(source, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.92);
+  }
+  async function imageFileToPage(file) {
+    const url = URL.createObjectURL(file);
+    try { const img = await loadImage(url); return toJpeg(img, img.naturalWidth, img.naturalHeight); }
+    finally { URL.revokeObjectURL(url); }
+  }
+  async function pdfToPages(file, room) {
+    if (!window.pdfjsLib) throw new Error('โหลดตัวอ่าน PDF ไม่สำเร็จ ลองรีเฟรชหน้า');
+    const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+    const out = [];
+    const n = Math.min(pdf.numPages, room);
+    for (let i = 1; i <= n; i++) {
+      setStatus(`กำลังเตรียม ${file.name} หน้า ${i}/${n}…`, 'busy');
+      const page = await pdf.getPage(i);
+      const v1 = page.getViewport({ scale: 1 });
+      const scale = MAX_DIM / Math.max(v1.width, v1.height);
+      const vp = page.getViewport({ scale });
+      const c = document.createElement('canvas');
+      c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      out.push({ name: `${file.name} · หน้า ${i}`, dataUrl: c.toDataURL('image/jpeg', 0.92) });
+    }
+    if (pdf.numPages > n) out.truncated = pdf.numPages;
+    return out;
+  }
+
+  async function handleFiles(files) {
+    if (busy) return;
+    const key = keyInput.value.trim();
+    if (!key) { setStatus('ใส่ Typhoon API key ก่อน แล้วลองอีกครั้ง', 'err'); keyInput.focus(); return; }
+    busy = true; toggleInputs(true);
+    pages.length = 0; pagesEl.innerHTML = '';
+    let note = '';
+    try {
+      for (const f of files) {
+        const room = MAX_PAGES - pages.length;
+        if (room <= 0) { note = ` (ทำได้สูงสุด ${MAX_PAGES} หน้าต่อครั้ง)`; break; }
+        if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
+          const got = await pdfToPages(f, room);
+          if (got.truncated) note = ` (PDF มี ${got.truncated} หน้า ทำได้สูงสุด ${MAX_PAGES} หน้าต่อครั้ง)`;
+          got.forEach((p) => pages.push(p));
+        } else if (f.type.startsWith('image/')) {
+          setStatus(`กำลังเตรียม ${f.name}…`, 'busy');
+          pages.push({ name: f.name, dataUrl: await imageFileToPage(f) });
+        }
+      }
+      if (!pages.length) throw new Error('ไม่พบรูปหรือ PDF ในไฟล์ที่เลือก');
+      $('results').hidden = false;
+      pages.forEach((p, i) => pagesEl.append(renderPage(p, i)));
+      const t0 = performance.now();
+      let ok = 0;
+      for (let i = 0; i < pages.length; i++) {
+        setStatus(`Typhoon กำลังอ่านหน้า ${i + 1}/${pages.length}…${note}`, 'busy');
+        const p = pages[i];
+        const s = performance.now();
+        try {
+          p.markdown = await ocr(p.dataUrl, key);
+          ok++;
+        } catch (err) {
+          p.error = err.message;
+          if (err.fatal) { pages.slice(i + 1).forEach((q) => { q.error = 'ข้ามเพราะข้อผิดพลาดด้านบน'; }); }
+        }
+        p.ms = performance.now() - s;
+        refreshPage(i);
+        if (p.error && /key|CORS|เชื่อมต่อ/.test(p.error)) {
+          pages.slice(i + 1).forEach((q, j) => { q.error = 'ข้ามเพราะข้อผิดพลาดด้านบน'; refreshPage(i + 1 + j); });
+          break;
+        }
+      }
+      const secs = ((performance.now() - t0) / 1000).toFixed(1);
+      $('summary').textContent = `อ่านแล้ว ${ok}/${pages.length} หน้า ใน ${secs} วินาที`;
+      setStatus(ok ? `เสร็จแล้ว${note}` : 'ยังอ่านไม่สำเร็จ ดูรายละเอียดในแต่ละหน้า', ok ? 'ok' : 'err');
+    } catch (err) {
+      setStatus(err.message, 'err');
+    } finally {
+      busy = false; toggleInputs(false);
+    }
+  }
+  function toggleInputs(dis) { $('sample').disabled = dis; drop.setAttribute('aria-disabled', String(dis)); }
+
+  // ---- Typhoon API ----
+  async function ocr(dataUrl, key) {
+    const base = ($('baseurl').value.trim() || 'https://api.opentyphoon.ai/v1').replace(/\/+$/, '');
+    const body = {
+      model: $('model').value.trim() || 'typhoon-ocr',
+      messages: [{ role: 'user', content: [
+        { type: 'text', text: PROMPT },
+        { type: 'image_url', image_url: { url: dataUrl } },
+      ] }],
+      max_tokens: 16384, temperature: 0.1, top_p: 0.6, repetition_penalty: 1.1,
+    };
+    let res;
+    try {
+      res = await fetch(base + '/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      throw new Error('เชื่อมต่อ Typhoon API ไม่ได้ อาจเป็นเพราะอินเทอร์เน็ต หรือเซิร์ฟเวอร์ไม่อนุญาตให้เรียกจากหน้าเว็บโดยตรง (CORS)');
+    }
+    if (!res.ok) {
+      let detail = '';
+      try { const j = await res.json(); detail = (j.error && (j.error.message || j.error)) || j.message || j.detail || ''; } catch {}
+      if (typeof detail !== 'string') detail = JSON.stringify(detail);
+      if (res.status === 401 || res.status === 403) throw new Error('API key ไม่ถูกต้องหรือหมดอายุ ตรวจ key แล้วลองใหม่ (' + res.status + ')');
+      if (res.status === 429) throw new Error('เรียกถี่เกินโควตา รอสักครู่แล้วลองใหม่ (429) ' + detail);
+      throw new Error(`Typhoon ตอบกลับข้อผิดพลาด ${res.status} ${detail}`.trim());
+    }
+    const j = await res.json();
+    const text = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+    if (typeof text !== 'string') throw new Error('ไม่พบข้อความในคำตอบจาก Typhoon');
+    return text.trim();
+  }
+
+  // ---- Rendering ----
+  function renderMarkdown(md) {
+    const prepped = md.replace(/<page_number>([\s\S]*?)<\/page_number>/g, '<span class="pgnum">หน้า $1</span>');
+    const html = window.marked ? marked.parse(prepped, { gfm: true, breaks: false }) : prepped.replace(/</g, '&lt;');
+    return window.DOMPurify ? DOMPurify.sanitize(html, { ADD_TAGS: ['figure'] }) : html;
+  }
+  function renderPage(p, i) {
+    const el = document.createElement('article');
+    el.className = 'page'; el.id = 'page-' + i;
+    el.innerHTML = `
+      <figure class="scan"><img alt=""><figcaption><span class="nm"></span><span class="tm"></span></figcaption></figure>
+      <div class="res">
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" aria-selected="true" data-v="r">ผลลัพธ์</button>
+          <button type="button" role="tab" aria-selected="false" data-v="m">Markdown</button>
+        </div>
+        <div class="view"></div>
+      </div>`;
+    el.querySelector('img').src = p.dataUrl;
+    el.querySelector('img').alt = 'ภาพเอกสาร ' + p.name;
+    el.querySelector('.nm').textContent = p.name;
+    el.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
+      el.querySelectorAll('.tabs button').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
+      p.view = b.dataset.v; refreshPage(i);
+    }));
+    fillView(el, p);
+    return el;
+  }
+  function fillView(el, p) {
+    const view = el.querySelector('.view');
+    view.innerHTML = '';
+    if (p.error) { const d = document.createElement('p'); d.className = 'err-box'; d.textContent = p.error; view.append(d); return; }
+    if (p.markdown == null) { view.innerHTML = '<div class="pending"><span class="spin"></span>รอคิวอ่าน…</div>'; return; }
+    if (p.view === 'm') { const pre = document.createElement('pre'); pre.className = 'raw'; pre.textContent = p.markdown; view.append(pre); }
+    else { const d = document.createElement('div'); d.className = 'rendered'; d.innerHTML = renderMarkdown(p.markdown); view.append(d); }
+    if (p.ms) el.querySelector('.tm').textContent = (p.ms / 1000).toFixed(1) + ' วินาที';
+  }
+  function refreshPage(i) { const el = $('page-' + i); if (el) fillView(el, pages[i]); }
+
+  // ---- Export ----
+  function allMarkdown() {
+    return pages.filter((p) => p.markdown).map((p) => `<!-- ${p.name} -->\n\n${p.markdown}`).join('\n\n---\n\n');
+  }
+  // Expand rowspan/colspan into a full grid so merged cells repeat their text in CSV.
+  function tableToRows(table) {
+    const grid = [];
+    [...table.rows].forEach((tr, r) => {
+      grid[r] = grid[r] || [];
+      let c = 0;
+      [...tr.cells].forEach((td) => {
+        while (grid[r][c] !== undefined) c++;
+        const rs = Math.max(1, td.rowSpan || 1), cs = Math.max(1, td.colSpan || 1);
+        const text = td.textContent.replace(/\s+/g, ' ').trim();
+        for (let dr = 0; dr < rs; dr++) {
+          grid[r + dr] = grid[r + dr] || [];
+          for (let dc = 0; dc < cs; dc++) grid[r + dr][c + dc] = text;
+        }
+        c += cs;
+      });
+    });
+    const width = Math.max(0, ...grid.map((r) => r.length));
+    return grid.map((r) => Array.from({ length: width }, (_, i) => r[i] ?? ''));
+  }
+  function csvEscape(v) { return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+  function allTablesCsv() {
+    const blocks = [];
+    pages.forEach((p) => {
+      if (!p.markdown) return;
+      const box = document.createElement('div');
+      box.innerHTML = renderMarkdown(p.markdown);
+      box.querySelectorAll('table').forEach((t, k) => {
+        blocks.push(`# ${p.name} · ตาราง ${k + 1}\n` + tableToRows(t).map((r) => r.map(csvEscape).join(',')).join('\n'));
+      });
+    });
+    return blocks.join('\n\n');
+  }
+  function download(name, text, type) {
+    const blob = new Blob(['﻿' + text], { type }); // BOM so Excel reads Thai correctly
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+  $('copyall').addEventListener('click', async (e) => {
+    const t = allMarkdown(); if (!t) return;
+    try { await navigator.clipboard.writeText(t); e.target.textContent = 'คัดลอกแล้ว'; }
+    catch { e.target.textContent = 'คัดลอกไม่ได้ ใช้ปุ่มดาวน์โหลดแทน'; }
+    setTimeout(() => { e.target.textContent = 'คัดลอก Markdown ทั้งหมด'; }, 2000);
+  });
+  $('dlmd').addEventListener('click', () => { const t = allMarkdown(); if (t) download('typhoon-ocr.md', t, 'text/markdown;charset=utf-8'); });
+  $('dlcsv').addEventListener('click', (e) => {
+    const t = allTablesCsv();
+    if (!t) { e.target.textContent = 'ไม่พบตารางในเอกสาร'; setTimeout(() => { e.target.textContent = 'ดาวน์โหลดตาราง .csv'; }, 2000); return; }
+    download('typhoon-ocr-tables.csv', t, 'text/csv;charset=utf-8');
+  });
+
+  // Exposed for automated checks only.
+  window.__ocrTest = { tableToRows, allTablesCsv, pages };
+})();
+</script>
+</body>
+</html>
