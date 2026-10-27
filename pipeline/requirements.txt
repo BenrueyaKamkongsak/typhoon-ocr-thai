@@ -1,0 +1,8 @@
+requests>=2.31
+Pillow>=10.0
+pypdfium2>=4.20
+rapidfuzz>=3.0
+# tests and example generation only
+pytest>=8.0
+fpdf2>=2.7
+uharfbuzz>=0.39
